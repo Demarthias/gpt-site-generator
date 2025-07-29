@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Website Generator - Image Management</title>
+    <link rel="stylesheet" href="/css/styles.css">
+    <style>
+        .image-upload-container {
+            max-width: 800px;
+            margin: 2rem auto;
+            padding: 1rem;
+        }
+
+        .drop-zone {
+            border: 2px dashed var(--primary-color);
+            border-radius: 8px;
+            padding: 2rem;
+            text-align: center;
+            margin-bottom: 1rem;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .drop-zone:hover {
+            background-color: rgba(var(--primary-color-rgb), 0.1);
+        }
+
+        .preview-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .preview-item {
+            position: relative;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .preview-item img {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+        }
+
+        .preview-item .remove-btn {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: rgba(0, 0, 0, 0.5);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            cursor: pointer;
+        }
+
+        .ai-image-generator {
+            margin-top: 2rem;
+            padding-top: 2rem;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .prompt-input {
+            width: 100%;
+            padding: 0.5rem;
+            margin-bottom: 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 1rem 0;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .error-message {
+            color: var(--error-color);
+            margin: 1rem 0;
+            display: none;
+        }
+
+        .success-message {
+            color: var(--success-color);
+            margin: 1rem 0;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="image-upload-container">
+        <h2>Image Management</h2>
+        
+        <!-- Image Upload Section -->
+        <section class="upload-section">
+            <h3>Upload Images</h3>
+            <div class="drop-zone" id="dropZone">
+                <p>Drag & drop images here or click to select files</p>
+                <input type="file" id="fileInput" multiple accept="image/*" style="display: none;">
+            </div>
+            <div class="preview-container" id="previewContainer"></div>
+            <div class="error-message" id="uploadError"></div>
+            <div class="success-message" id="uploadSuccess"></div>
+            <div class="loading" id="uploadLoading">Uploading and processing images...</div>
+        </section>
+
+        <!-- AI Image Generation Section -->
+        <section class="ai-image-generator">
+            <h3>Generate AI Images</h3>
+            <div class="prompt-container">
+                <textarea 
+                    class="prompt-input" 
+                    id="imagePrompt" 
+                    placeholder="Describe the image you want to generate..."
+                    rows="3"></textarea>
+                <button class="btn" id="generateBtn">Generate Image</button>
+            </div>
+            <div class="preview-container" id="aiPreviewContainer"></div>
+            <div class="error-message" id="generateError"></div>
+            <div class="loading" id="generateLoading">Generating image with AI...</div>
+        </section>
+    </div>
+
+    <script>
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const previewContainer = document.getElementById('previewContainer');
+        const uploadError = document.getElementById('uploadError');
+        const uploadSuccess = document.getElementById('uploadSuccess');
+        const uploadLoading = document.getElementById('uploadLoading');
+        const generateBtn = document.getElementById('generateBtn');
+        const imagePrompt = document.getElementById('imagePrompt');
+        const aiPreviewContainer = document.getElementById('aiPreviewContainer');
+        const generateError = document.getElementById('generateError');
+        const generateLoading = document.getElementById('generateLoading');
+
+        // Handle drag and drop
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.style.backgroundColor = 'rgba(var(--primary-color-rgb), 0.1)';
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.style.backgroundColor = '';
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.style.backgroundColor = '';
+            handleFiles(e.dataTransfer.files);
+        });
+
+        dropZone.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            handleFiles(e.target.files);
+        });
+
+        async function handleFiles(files) {
+            const formData = new FormData();
+            for (let file of files) {
+                if (file.type.startsWith('image/')) {
+                    formData.append('images', file);
+                }
+            }
+
+            uploadError.style.display = 'none';
+            uploadSuccess.style.display = 'none';
+            uploadLoading.style.display = 'block';
+
+            try {
+                const response = await fetch('/api/images/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error);
+
+                uploadSuccess.textContent = 'Images uploaded successfully!';
+                uploadSuccess.style.display = 'block';
+                
+                // Add previews
+                data.images.forEach(image => {
+                    addImagePreview(image.url, previewContainer);
+                });
+            } catch (error) {
+                uploadError.textContent = error.message;
+                uploadError.style.display = 'block';
+            } finally {
+                uploadLoading.style.display = 'none';
+            }
+        }
+
+        generateBtn.addEventListener('click', async () => {
+            const prompt = imagePrompt.value.trim();
+            if (!prompt) {
+                generateError.textContent = 'Please enter a description for the image.';
+                generateError.style.display = 'block';
+                return;
+            }
+
+            generateError.style.display = 'none';
+            generateLoading.style.display = 'block';
+            generateBtn.disabled = true;
+
+            try {
+                const response = await fetch('/api/images/generate-image', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ prompt })
+                });
+
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error);
+
+                addImagePreview(data.image.url, aiPreviewContainer);
+                imagePrompt.value = '';
+            } catch (error) {
+                generateError.textContent = error.message;
+                generateError.style.display = 'block';
+            } finally {
+                generateLoading.style.display = 'none';
+                generateBtn.disabled = false;
+            }
+        });
+
+        function addImagePreview(url, container) {
+            const div = document.createElement('div');
+            div.className = 'preview-item';
+            
+            const img = document.createElement('img');
+            img.src = url;
+            img.alt = 'Preview';
+            
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'remove-btn';
+            removeBtn.innerHTML = '×';
+            removeBtn.onclick = () => div.remove();
+            
+            div.appendChild(img);
+            div.appendChild(removeBtn);
+            container.appendChild(div);
+        }
+    </script>
+</body>
+</html>
