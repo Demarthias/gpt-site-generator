@@ -6,6 +6,7 @@ const generateSchema = Joi.object({
   niche: Joi.string().trim().required().max(100),
   theme: Joi.string().valid('light', 'dark').default('light'),
   style: Joi.string().valid('modern', 'classic', 'minimalist').default('modern'),
+  websiteType: Joi.string().valid('business', 'retail', 'blog', 'portfolio', 'restaurant').default('business'),
   images: Joi.array().items(Joi.string()).max(5).default([])
 });
 

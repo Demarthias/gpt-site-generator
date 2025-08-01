@@ -1,4 +1,3 @@
-cat << 'EOF' > public/index.html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -35,19 +34,120 @@ cat << 'EOF' > public/index.html
         <option value="portfolio">Portfolio / Creative</option>
         <option value="restaurant">Restaurant / Food</option>
       </select>
+      <div style="margin-top:1rem;">
+        <label>Images:</label>
+        <div style="display:flex;gap:1rem;align-items:center;">
+          <label><input type="radio" name="imageMode" value="upload" checked> Upload</label>
+          <label><input type="radio" name="imageMode" value="ai"> AI Generate</label>
+        </div>
+        <div id="uploadSection">
+          <input type="file" id="images" name="images" accept="image/*" multiple max="5">
+        </div>
+        <div id="aiSection" style="display:none;">
+          <input type="text" id="aiPrompt" placeholder="Describe the image you want (e.g. modern office building)">
+          <button type="button" id="generateAIImage">Generate Image</button>
+          <div id="aiImagesPreview" style="margin-top:0.5rem;"></div>
+        </div>
+      </div>
       <button type="submit">Generate Website</button>
     </form>
     <div class="result" id="result"></div>
   </div>
   <script>
+    // Toggle between upload and AI generate
+    const uploadSection = document.getElementById('uploadSection');
+    const aiSection = document.getElementById('aiSection');
+    let aiImages = [];
+    document.querySelectorAll('input[name="imageMode"]').forEach(radio => {
+      radio.addEventListener('change', function() {
+        if (this.value === 'upload') {
+          uploadSection.style.display = '';
+          aiSection.style.display = 'none';
+        } else {
+          uploadSection.style.display = 'none';
+          aiSection.style.display = '';
+        }
+      });
+    });
+
+    // AI image generation logic (calls backend endpoint)
+    document.getElementById('generateAIImage').addEventListener('click', async function() {
+      const prompt = document.getElementById('aiPrompt').value.trim();
+      if (!prompt) {
+        alert('Please enter a description for the AI image.');
+        return;
+      }
+      document.getElementById('generateAIImage').disabled = true;
+      document.getElementById('generateAIImage').textContent = 'Generating...';
+      try {
+        const res = await fetch('/api/images/generate-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.image && data.image.url) {
+            aiImages.push(data.image.url);
+            const img = document.createElement('img');
+            img.src = data.image.url;
+            img.style.maxWidth = '100px';
+            img.style.marginRight = '0.5rem';
+            document.getElementById('aiImagesPreview').appendChild(img);
+          }
+        } else {
+          const err = await res.json();
+          alert('AI image error: ' + (err.error || 'Unknown error'));
+        }
+      } catch (err) {
+        alert('AI image error: ' + err.message);
+      }
+      document.getElementById('generateAIImage').disabled = false;
+      document.getElementById('generateAIImage').textContent = 'Generate Image';
+    });
+
     document.getElementById('siteForm').addEventListener('submit', async function(e) {
       e.preventDefault();
       document.getElementById('result').textContent = 'Generating...';
       const data = {
         biz: document.getElementById('biz').value,
         niche: document.getElementById('niche').value,
-        websiteType: document.getElementById('websiteType').value
+        websiteType: document.getElementById('websiteType').value,
+        images: []
       };
+      const imageMode = document.querySelector('input[name="imageMode"]:checked').value;
+      if (imageMode === 'upload') {
+        const imagesInput = document.getElementById('images');
+        if (imagesInput.files.length > 0) {
+          const formData = new FormData();
+          for (let i = 0; i < imagesInput.files.length && i < 5; i++) {
+            formData.append('images', imagesInput.files[i]);
+          }
+          try {
+            const uploadRes = await fetch('/upload', {
+              method: 'POST',
+              body: formData
+            });
+            if (uploadRes.ok) {
+              const uploadData = await uploadRes.json();
+              data.images = uploadData.urls;
+            } else {
+              const err = await uploadRes.json();
+              document.getElementById('result').textContent = 'Image upload error: ' + (err.error || 'Unknown error');
+              return;
+            }
+          } catch (err) {
+            document.getElementById('result').textContent = 'Image upload error: ' + err.message;
+            return;
+          }
+        }
+      } else if (imageMode === 'ai') {
+        if (aiImages.length === 0) {
+          document.getElementById('result').textContent = 'Please generate at least one AI image.';
+          return;
+        }
+        data.images = aiImages;
+      }
       try {
         const response = await fetch('/generate', {
           method: 'POST',
@@ -75,4 +175,3 @@ cat << 'EOF' > public/index.html
   </script>
 </body>
 </html>
-EOF
